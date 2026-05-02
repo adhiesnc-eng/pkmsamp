@@ -161,7 +161,7 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbxHzx_xX3pyC00sfXd3ekFdHDX19hGS0dP9M02LFKku6HUl9l2uwsYZOi-C7ilUYx-s/exec"; 
         let currentStream = null;
         let faceDescriptor = null;
-        let detectInterval = null;
+        let isDetecting = false;
 
         async function prosesSimpan() {
             const nip = document.getElementById('reg-nip').value.trim();
@@ -185,13 +185,18 @@
                         nama: nama
                     })
                 });
-
-                localStorage.setItem('temp_reg_user', JSON.stringify({ nip, nama }));
-                tampilkanScanner(nama);
-
+                
+                const result = await response.json();
+                
+                if (result.status === "success") {
+                    localStorage.setItem('temp_reg_user', JSON.stringify({ nip, nama }));
+                    tampilkanScanner(nama);
+                } else {
+                    throw new Error(result.message || "Gagal menyimpan data.");
+                }
             } catch (err) {
                 console.error(err);
-                alert("❌ Gagal terhubung ke Cloud. Periksa koneksi internet.");
+                alert("❌ Gagal terhubung ke Cloud: " + err.message);
                 btn.disabled = false;
                 btn.innerHTML = `Simpan Data & Lanjut Scan`;
             }
@@ -201,14 +206,12 @@
             document.getElementById('reg-form-container').classList.add('hidden');
             document.getElementById('reg-scan-container').classList.remove('hidden');
             document.getElementById('user-info-display').innerText = `Petugas: ${nama}`;
-            
             await initCamera();
         }
 
         async function initCamera() {
             const status = document.getElementById('scan-status');
             const video = document.getElementById('video');
-            const btnCapture = document.getElementById('btn-capture');
             const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 
             try {
@@ -224,34 +227,41 @@
                 });
                 video.srcObject = currentStream;
 
-                detectInterval = setInterval(async () => {
-                    if (video.paused || video.ended) return;
-                    
-                    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-                        .withFaceLandmarks()
-                        .withFaceDescriptor();
-
-                    if (detection) {
-                        status.innerText = "Wajah Terdeteksi! Tetap Diam";
-                        status.className = "text-emerald-500 text-[10px] font-bold";
-                        btnCapture.disabled = false;
-                        btnCapture.className = "w-full masook-gradient-dinkes text-white py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-widest shadow-lg active:scale-95 transition-all";
-                        btnCapture.innerText = "Daftarkan Wajah Sekarang";
-                        faceDescriptor = Array.from(detection.descriptor);
-                    } else {
-                        status.innerText = "Posisikan Wajah di Lingkaran";
-                        status.className = "text-amber-500 text-[10px] font-bold";
-                        btnCapture.disabled = true;
-                        btnCapture.className = "w-full bg-slate-200 text-slate-400 py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-widest";
-                        btnCapture.innerText = "Tunggu Sensor...";
-                    }
-                }, 1000);
-
+                isDetecting = true;
+                runDetection();
             } catch (err) {
                 console.error(err);
                 status.innerText = "Kamera Gagal Diakses";
-                alert("Izin kamera diperlukan untuk mendaftarkan wajah.");
             }
+        }
+
+        async function runDetection() {
+            if(!isDetecting) return;
+            const video = document.getElementById('video');
+            const status = document.getElementById('scan-status');
+            const btnCapture = document.getElementById('btn-capture');
+
+            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (detection) {
+                status.innerText = "Wajah Terdeteksi! Tetap Diam";
+                status.className = "text-emerald-500 text-[10px] font-bold";
+                btnCapture.disabled = false;
+                btnCapture.className = "w-full masook-gradient-dinkes text-white py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-widest shadow-lg active:scale-95 transition-all";
+                btnCapture.innerText = "Daftarkan Wajah Sekarang";
+                faceDescriptor = Array.from(detection.descriptor);
+            } else {
+                status.innerText = "Posisikan Wajah di Lingkaran";
+                status.className = "text-amber-500 text-[10px] font-bold";
+                btnCapture.disabled = true;
+                btnCapture.className = "w-full bg-slate-200 text-slate-400 py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-widest";
+                btnCapture.innerText = "Tunggu Sensor...";
+            }
+
+            // Gunakan requestAnimationFrame lebih stabil daripada setInterval
+            if(isDetecting) setTimeout(runDetection, 100);
         }
 
         async function ambilWajah() {
@@ -259,26 +269,21 @@
             const status = document.getElementById('scan-status');
             const user = JSON.parse(localStorage.getItem('temp_reg_user'));
 
-            if (!faceDescriptor) {
-                alert("Wajah belum terdeteksi sempurna.");
-                return;
-            }
+            if (!faceDescriptor) return;
 
+            isDetecting = false; // Stop deteksi saat proses kirim
             btn.disabled = true;
             btn.innerText = "Mendaftarkan...";
             status.innerText = "Sinkronisasi Biometrik...";
 
             try {
-                // Konversi descriptor ke string JSON lalu ke Base64 untuk pengiriman aman
-                const descriptorString = JSON.stringify(faceDescriptor);
-                const base64Descriptor = btoa(descriptorString);
-
+                // BUG FIX: Kirim array murni, jangan di btoa() agar tidak korup
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify({
                         action: 'update_face_descriptor',
                         nip: user.nip,
-                        descriptor: base64Descriptor
+                        descriptor: JSON.stringify(faceDescriptor) // Kirim string JSON murni
                     })
                 });
 
@@ -286,23 +291,21 @@
 
                 if (result.status === "success") {
                     status.innerText = "Registrasi Berhasil!";
-                    alert("✅ Registrasi Biometrik Berhasil! Anda sudah bisa melakukan presensi.");
+                    alert("✅ Registrasi Biometrik Berhasil!");
                     
-                    if(detectInterval) clearInterval(detectInterval);
                     if(currentStream) currentStream.getTracks().forEach(track => track.stop());
-                    
                     localStorage.removeItem('temp_reg_user');
                     window.location.replace('index.html');
                 } else {
-                    throw new Error("Server response failed");
+                    throw new Error(result.message || "Gagal kirim ke server.");
                 }
-
             } catch (err) {
-                console.error("Registrasi Gagal:", err);
-                alert("❌ Gagal mendaftarkan wajah ke server. Silakan coba lagi.");
+                console.error(err);
+                alert("❌ Gagal mendaftarkan wajah: " + err.message);
+                isDetecting = true;
+                runDetection();
                 btn.disabled = false;
                 btn.innerText = "Daftarkan Wajah Sekarang";
-                status.innerText = "Terjadi kesalahan koneksi.";
             }
         }
     </script>
