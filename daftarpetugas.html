@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Registrasi Petugas - Masook AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         body { 
@@ -46,7 +47,39 @@
             70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
             100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
-        /* Mencegah zoom otomatis pada iPhone saat fokus input */
+
+        /* Camera Overlay Styles */
+        .video-container {
+            position: relative;
+            width: 260px;
+            height: 260px;
+            margin: 0 auto;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 4px solid #10b981;
+            background: #000;
+        }
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(16, 185, 129, 0.7);
+            box-shadow: 0 0 15px #10b981;
+            animation: scanning 2s infinite ease-in-out;
+        }
+        @keyframes scanning {
+            0%, 100% { top: 10%; }
+            50% { top: 90%; }
+        }
+
         @media screen and (max-width: 768px) {
             input { font-size: 16px !important; }
         }
@@ -72,7 +105,7 @@
         </div>
     </div>
 
-    <main class="max-w-md mx-auto w-full px-6 -mt-10 relative z-20 flex-grow pb-10">
+    <main id="reg-form-container" class="max-w-md mx-auto w-full px-6 -mt-10 relative z-20 flex-grow pb-10">
         <div class="glass-card p-7 rounded-[2.5rem] shadow-2xl shadow-emerald-900/5">
             <div class="flex items-center gap-2 mb-6">
                 <div class="w-1 h-5 bg-emerald-500 rounded-full"></div>
@@ -93,82 +126,58 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                 </svg>
-                <span id="btn-text">Simpan ke Cloud</span>
+                <span id="btn-text">Simpan Data & Lanjut Scan</span>
             </button>
-            
-            <div class="mt-8 flex flex-col items-center text-center">
-                <p class="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
-                    Sistem akan memvalidasi data ke database<br>pusat secara otomatis.
-                </p>
-            </div>
         </div>
     </main>
 
-    <div id="modal-face" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-6">
-        <div class="glass-card w-full max-w-xs rounded-[3rem] p-8 text-center shadow-2xl animate-bounceIn relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-1.5 masook-gradient-dinkes"></div>
-            
-            <div class="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+    <main id="reg-scan-container" class="hidden max-w-md mx-auto w-full px-6 -mt-10 relative z-20 flex-grow pb-10">
+        <div class="glass-card p-7 rounded-[3rem] shadow-2xl text-center">
+            <div class="mb-6">
+                <h2 class="text-slate-800 font-extrabold text-[12px] uppercase tracking-widest">Pendaftaran Wajah</h2>
+                <p id="scan-status" class="text-emerald-500 text-[10px] font-bold animate-pulse mt-1">Menginisialisasi Kamera...</p>
             </div>
-            
-            <h3 class="font-extrabold text-slate-800 text-lg uppercase tracking-tight mb-2">Simpan Berhasil</h3>
-            <p class="text-slate-400 text-[10px] leading-relaxed mb-8 font-semibold uppercase tracking-wider">
-                Lanjutkan pendaftaran wajah<br>untuk fitur absen face AI?
-            </p>
-            
-            <div class="space-y-3">
-                <button onclick="daftarWajahSekarang()" class="w-full masook-gradient-dinkes text-white py-3.5 rounded-xl font-extrabold text-[10px] uppercase tracking-widest shadow-md active:scale-95 transition-all">
-                    Daftar Wajah
-                </button>
-                <button type="button" onclick="finishLater()" class="w-full bg-slate-100 text-slate-400 py-3.5 rounded-xl font-extrabold text-[10px] uppercase tracking-widest active:scale-95 transition-all">
-                    Selesai
-                </button>
+
+            <div class="video-container mb-8">
+                <video id="video" autoplay muted playsinline></video>
+                <div class="scan-line"></div>
             </div>
+
+            <div class="bg-slate-50 rounded-2xl p-4 mb-6 border border-slate-100">
+                <p id="user-info-display" class="text-[11px] font-bold text-slate-700 uppercase tracking-tight">Memuat...</p>
+            </div>
+
+            <button id="btn-capture" disabled onclick="ambilWajah()" class="w-full bg-slate-200 text-slate-400 py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-widest transition-all">
+                Tunggu Sensor...
+            </button>
         </div>
-    </div>
+    </main>
 
     <div class="py-6 text-center shrink-0">
         <p class="text-[8px] font-extrabold text-slate-300 uppercase tracking-[0.4em]">Masook System • v3.0</p>
     </div>
 
     <script>
-        // URL Google Apps Script yang baru
         const API_URL = "https://script.google.com/macros/s/AKfycbxHzx_xX3pyC00sfXd3ekFdHDX19hGS0dP9M02LFKku6HUl9l2uwsYZOi-C7ilUYx-s/exec"; 
+        let currentStream = null;
+        let faceDescriptor = null;
 
         async function prosesSimpan() {
             const nip = document.getElementById('reg-nip').value.trim();
             const nama = document.getElementById('reg-nama').value.trim();
             const btn = document.getElementById('btn-simpan');
-            const btnText = document.getElementById('btn-text');
 
-            // Validasi Dasar
             if (!nip || !nama) {
                 alert("⚠️ Mohon lengkapi NIP dan Nama Petugas!");
                 return;
             }
 
-            if (nip.length < 18) {
-                if(!confirm("NIP biasanya berjumlah 18 digit. Anda yakin NIP sudah benar?")) return;
-            }
-
-            // UI Loading State
             btn.disabled = true;
-            btn.classList.add('opacity-70');
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = `
-                <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Sinkronisasi Cloud...</span>
-            `;
+            btn.innerHTML = `<span>Menghubungkan Cloud...</span>`;
 
             try {
-                // Gunakan format POST standar agar data terbaca di Apps Script
-                const response = await fetch(API_URL, {
+                // Simpan data NIP & Nama ke Google Sheets
+                await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify({
                         action: 'register_data_only',
@@ -177,34 +186,113 @@
                     })
                 });
 
-                // Simpan data di localStorage untuk digunakan di halaman registrasi wajah
+                // Simpan ke localStorage sementara
                 localStorage.setItem('temp_reg_user', JSON.stringify({ nip, nama }));
-
-                // Simulasi delay sedikit agar user merasa sistem sedang bekerja
-                setTimeout(() => {
-                    document.getElementById('modal-face').classList.remove('hidden');
-                    btn.disabled = false;
-                    btn.classList.remove('opacity-70');
-                    btn.innerHTML = originalContent;
-                }, 800);
+                
+                // Pindah ke UI Scan Kamera
+                tampilkanScanner(nama);
 
             } catch (err) {
                 console.error(err);
-                alert("❌ Gagal terhubung ke Cloud. Pastikan internet aktif atau Apps Script telah di-deploy ulang.");
+                alert("❌ Gagal terhubung ke Cloud.");
                 btn.disabled = false;
-                btn.classList.remove('opacity-70');
-                btn.innerHTML = originalContent;
+                btn.innerHTML = `Simpan Data & Lanjut Scan`;
             }
         }
 
-        function finishLater() {
-            localStorage.removeItem('temp_reg_user');
-            window.location.replace('index.html');
+        async function tampilkanScanner(nama) {
+            document.getElementById('reg-form-container').classList.add('hidden');
+            document.getElementById('reg-scan-container').classList.remove('hidden');
+            document.getElementById('user-info-display').innerText = `Petugas: ${nama}`;
+            
+            await initCamera();
         }
 
-        function daftarWajahSekarang() {
-            // Mengarahkan ke mode registrasi di halaman utama
-            window.location.href = 'index.html?mode=registrasi';
+        async function initCamera() {
+            const status = document.getElementById('scan-status');
+            const video = document.getElementById('video');
+            const btnCapture = document.getElementById('btn-capture');
+            const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+
+            try {
+                status.innerText = "Memuat AI Sensor...";
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+
+                currentStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user", width: 640, height: 480 } 
+                });
+                video.srcObject = currentStream;
+
+                // Loop Deteksi Wajah
+                const detectLoop = setInterval(async () => {
+                    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                        .withFaceLandmarks()
+                        .withFaceDescriptor();
+
+                    if (detection) {
+                        status.innerText = "Wajah Terdeteksi! Tetap Diam";
+                        status.className = "text-emerald-500 text-[10px] font-bold";
+                        btnCapture.disabled = false;
+                        btnCapture.className = "w-full masook-gradient-dinkes text-white py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-widest shadow-lg active:scale-95 transition-all";
+                        btnCapture.innerText = "Daftarkan Wajah Sekarang";
+                        faceDescriptor = Array.from(detection.descriptor);
+                    } else {
+                        status.innerText = "Posisikan Wajah di Lingkaran";
+                        status.className = "text-amber-500 text-[10px] font-bold";
+                        btnCapture.disabled = true;
+                        btnCapture.className = "w-full bg-slate-200 text-slate-400 py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-widest";
+                        btnCapture.innerText = "Tunggu Sensor...";
+                    }
+                }, 1000);
+
+            } catch (err) {
+                console.error(err);
+                status.innerText = "Kamera Gagal Diakses";
+            }
+        }
+
+        async function ambilWajah() {
+            const btn = document.getElementById('btn-capture');
+            const status = document.getElementById('scan-status');
+            const user = JSON.parse(localStorage.getItem('temp_reg_user'));
+
+            if (!faceDescriptor) return;
+
+            btn.disabled = true;
+            btn.innerText = "Mendaftarkan...";
+            status.innerText = "Sinkronisasi Biometrik...";
+
+            try {
+                // Kirim Descriptor Wajah ke Server (Sheet Petugas Kolom Descriptor)
+                // Format: Descriptor diubah ke Base64 agar aman di Sheet
+                const base64Descriptor = btoa(JSON.stringify(faceDescriptor));
+
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'update_face_descriptor',
+                        nip: user.nip,
+                        descriptor: base64Descriptor
+                    })
+                });
+
+                status.innerText = "Registrasi Berhasil!";
+                alert("✅ Registrasi Biometrik Berhasil! Anda sudah bisa melakukan presensi.");
+                
+                // Stop Kamera & Redirect
+                if(currentStream) currentStream.getTracks().forEach(track => track.stop());
+                localStorage.removeItem('temp_reg_user');
+                window.location.replace('index.html');
+
+            } catch (err) {
+                alert("❌ Gagal mendaftarkan wajah. Coba lagi.");
+                btn.disabled = false;
+                btn.innerText = "Daftarkan Wajah Sekarang";
+            }
         }
     </script>
 </body>
