@@ -161,6 +161,7 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbxHzx_xX3pyC00sfXd3ekFdHDX19hGS0dP9M02LFKku6HUl9l2uwsYZOi-C7ilUYx-s/exec"; 
         let currentStream = null;
         let faceDescriptor = null;
+        let detectInterval = null;
 
         async function prosesSimpan() {
             const nip = document.getElementById('reg-nip').value.trim();
@@ -176,8 +177,7 @@
             btn.innerHTML = `<span>Menghubungkan Cloud...</span>`;
 
             try {
-                // Simpan data NIP & Nama ke Google Sheets
-                await fetch(API_URL, {
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify({
                         action: 'register_data_only',
@@ -186,15 +186,12 @@
                     })
                 });
 
-                // Simpan ke localStorage sementara
                 localStorage.setItem('temp_reg_user', JSON.stringify({ nip, nama }));
-                
-                // Pindah ke UI Scan Kamera
                 tampilkanScanner(nama);
 
             } catch (err) {
                 console.error(err);
-                alert("❌ Gagal terhubung ke Cloud.");
+                alert("❌ Gagal terhubung ke Cloud. Periksa koneksi internet.");
                 btn.disabled = false;
                 btn.innerHTML = `Simpan Data & Lanjut Scan`;
             }
@@ -227,8 +224,9 @@
                 });
                 video.srcObject = currentStream;
 
-                // Loop Deteksi Wajah
-                const detectLoop = setInterval(async () => {
+                detectInterval = setInterval(async () => {
+                    if (video.paused || video.ended) return;
+                    
                     const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
                         .withFaceLandmarks()
                         .withFaceDescriptor();
@@ -252,6 +250,7 @@
             } catch (err) {
                 console.error(err);
                 status.innerText = "Kamera Gagal Diakses";
+                alert("Izin kamera diperlukan untuk mendaftarkan wajah.");
             }
         }
 
@@ -260,18 +259,21 @@
             const status = document.getElementById('scan-status');
             const user = JSON.parse(localStorage.getItem('temp_reg_user'));
 
-            if (!faceDescriptor) return;
+            if (!faceDescriptor) {
+                alert("Wajah belum terdeteksi sempurna.");
+                return;
+            }
 
             btn.disabled = true;
             btn.innerText = "Mendaftarkan...";
             status.innerText = "Sinkronisasi Biometrik...";
 
             try {
-                // Kirim Descriptor Wajah ke Server (Sheet Petugas Kolom Descriptor)
-                // Format: Descriptor diubah ke Base64 agar aman di Sheet
-                const base64Descriptor = btoa(JSON.stringify(faceDescriptor));
+                // Konversi descriptor ke string JSON lalu ke Base64 untuk pengiriman aman
+                const descriptorString = JSON.stringify(faceDescriptor);
+                const base64Descriptor = btoa(descriptorString);
 
-                await fetch(API_URL, {
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify({
                         action: 'update_face_descriptor',
@@ -280,18 +282,27 @@
                     })
                 });
 
-                status.innerText = "Registrasi Berhasil!";
-                alert("✅ Registrasi Biometrik Berhasil! Anda sudah bisa melakukan presensi.");
-                
-                // Stop Kamera & Redirect
-                if(currentStream) currentStream.getTracks().forEach(track => track.stop());
-                localStorage.removeItem('temp_reg_user');
-                window.location.replace('index.html');
+                const result = await response.json();
+
+                if (result.status === "success") {
+                    status.innerText = "Registrasi Berhasil!";
+                    alert("✅ Registrasi Biometrik Berhasil! Anda sudah bisa melakukan presensi.");
+                    
+                    if(detectInterval) clearInterval(detectInterval);
+                    if(currentStream) currentStream.getTracks().forEach(track => track.stop());
+                    
+                    localStorage.removeItem('temp_reg_user');
+                    window.location.replace('index.html');
+                } else {
+                    throw new Error("Server response failed");
+                }
 
             } catch (err) {
-                alert("❌ Gagal mendaftarkan wajah. Coba lagi.");
+                console.error("Registrasi Gagal:", err);
+                alert("❌ Gagal mendaftarkan wajah ke server. Silakan coba lagi.");
                 btn.disabled = false;
                 btn.innerText = "Daftarkan Wajah Sekarang";
+                status.innerText = "Terjadi kesalahan koneksi.";
             }
         }
     </script>
