@@ -150,7 +150,8 @@
     </div>
 
     <script>
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbzHHaHNY3KKqftUB4DkSKof4uG15dRl61AHqURfpUMpui9npiAfY6J6jURHc4n0QJXO/exec";
+        // URL WEB APP GAS BARU
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbzHzx_xX3pyC00sfXd3ekFdHDX19hGS0dP9M02LFKku6HUl9l2uwsYZOi-C7ilUYx-s/exec";
         let labeledDescriptors = [], userData = [], stream = null;
 
         // FUNGSI SINKRONISASI CLOUD (MULTI-HP)
@@ -269,7 +270,7 @@
                         localStorage.setItem('isLoggedIn', 'true');
                         localStorage.setItem('scanned_user', JSON.stringify(user));
 
-                        // 5. Kirim data absensi ke cloud secara background (Opsional)
+                        // 5. Kirim data absensi ke cloud secara background
                         await fetch(GAS_URL, {
                             method: 'POST',
                             body: JSON.stringify({
